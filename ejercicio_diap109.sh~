@@ -1,7 +1,0 @@
-#!/bin/bash
-
-#Script que imprime el nombre de usuario, fecha actual e informacion de sistema operativo
-
-Nombre de usuario: $USER
-Fecha: $date
-Informacion del sistema operativo: $uname

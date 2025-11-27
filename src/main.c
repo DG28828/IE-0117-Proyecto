@@ -1,5 +1,25 @@
 #include <gtk/gtk.h>
 
+static void importar (GtkWidget *widget, gpointer user_data) {
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER(user_data);
+    GFile *archivo = gtk_file_chooser_get_file(chooser);   //Extraer identificador GFile del archivo seleccionado 
+    if (archivo != NULL) {
+	gchar *path = g_file_get_path(archivo);
+
+	if (path != NULL) {
+	    g_print("Archivo seleccionado: %s\n", path);
+	    g_free(path);
+	}
+	g_object_unref(archivo);
+    }
+    else {
+	g_print("No se seleccionó ningún archivo\n");
+    }
+}
+
+//static void visualizar (GtkWidget *widget, gpointer data) {
+//}
+
 static void activate (GtkApplication* app, gpointer user_data) {
 
     // ***************  DECLARAR WIDGETS ***************
@@ -106,7 +126,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     
     // Crear boton
     dataimport_button = gtk_button_new_with_label ("Importar");
-    //g_signal_connect (dataimport_button, "clicked", G_CALLBACK (fun_importar), NULL);
+    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), dataimport_picker);
     gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); 
 
     
@@ -130,7 +150,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     
     // Crear boton
     boton_visualizar = gtk_button_new_with_label ("Visualizar");
-    //g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (fun_visualizar), NULL);
+    //g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (visualizar), NULL);
     gtk_grid_attach(GTK_GRID(window_grid), boton_visualizar, 3, 0, 1, 1);
 
     

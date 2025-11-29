@@ -1,16 +1,33 @@
 #include <gtk/gtk.h>
 
+typedef struct {
+    int Entero;                 // Para pasar enteros
+    char * Cadena;               // Para pasar cadenas entre callbacks (por ejemplo un path)
+    GtkWidget * Widget;           // Para pasar widgets entre callbacks
+} Datos_Callback;
+
 static void importar (GtkWidget *widget, gpointer user_data) {
-    GtkFileChooser *chooser = GTK_FILE_CHOOSER(user_data);
-    GFile *archivo = gtk_file_chooser_get_file(chooser);   //Extraer identificador GFile del archivo seleccionado 
-    if (archivo != NULL) {
-	gchar *path = g_file_get_path(archivo);
+    
+    Datos_Callback * Datos_Callback_Importacion = (Datos_Callback*) user_data; //Cast del gpointer 
+    GtkWidget *dataimport_picker = Datos_Callback_Importacion->Widget;
+    
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER(dataimport_picker);
+    GFile *archivo = gtk_file_chooser_get_file(chooser);   // Extraer identificador GFile del archivo seleccionado 
+    if (archivo != NULL) {                                   // Verificar que *archivo no es null
+	gchar *path = g_file_get_path(archivo);            // Extraer path del archivo
 
 	if (path != NULL) {
 	    g_print("Archivo seleccionado: %s\n", path);
-	    g_free(path);
+
+	    if (Datos_Callback_Importacion->Cadena != NULL) {   //Liberar espacio si estuviera ocupado
+                g_free(Datos_Callback_Importacion->Cadena);
+            }
+
+	    Datos_Callback_Importacion -> Cadena = g_strdup(path);   //Copia del string con path a struct
+	    
+	    g_free(path);                                  // Liberar el string (según documentación)
 	}
-	g_object_unref(archivo);
+	g_object_unref(archivo);                           // Liberar el archivo (según documentación)
     }
     else {
 	g_print("No se seleccionó ningún archivo\n");
@@ -113,7 +130,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand (dataimport_label, FALSE);                       // Expandir: Falso
 
     // Crear seleccionador
-    dataimport_picker = gtk_file_chooser_button_new ("Escoja un archivo", GTK_FILE_CHOOSER_ACTION_OPEN);
+    dataimport_picker = gtk_file_chooser_button_new ("Seleccione un archivo", GTK_FILE_CHOOSER_ACTION_OPEN);
     gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dataimport_picker), FALSE);
     gtk_widget_set_hexpand (dataimport_picker, TRUE);                       // Expandir: Verdadero
 
@@ -123,11 +140,18 @@ static void activate (GtkApplication* app, gpointer user_data) {
 
     
     // ***************   BOTON IMPORTAR   ***************
+
     
     // Crear boton
     dataimport_button = gtk_button_new_with_label ("Importar");
-    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), dataimport_picker);
-    gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); 
+
+    // Datos a pasar al callback
+    static Datos_Callback Datos_Callback_Importacion;
+    Datos_Callback_Importacion.Cadena = NULL;                   // Para obtener path
+    Datos_Callback_Importacion.Widget = dataimport_picker;      // Para pasar Widget 
+  
+    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), &Datos_Callback_Importacion); // Conectar señal
+    gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); // Contener
 
     
     // ***************     PLOT AREA      ***************

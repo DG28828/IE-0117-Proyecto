@@ -1,20 +1,178 @@
+#include <stdio.h>
 #include <gtk/gtk.h>
+#include <gtk/gtkx.h>
+
+typedef struct {
+    int Entero;                              // Para pasar enteros
+    char * path;                             // Para pasar path de archivo actual
+    GtkWidget * dataimport_picker;           // Para pasar widget de picker
+    GtkWidget * plot_container;              // Para pasar widget de contenedor de grafica
+
+// Para pasar configuraciones de grafica
+    GtkWidget * entrada_titulo;
+    GtkWidget * entrada_xlabel;
+    GtkWidget * entrada_ylabel;
+    GtkWidget * boton_color;
+    GtkWidget * grosor;
+    GtkWidget * entrada_xmin;
+    GtkWidget * entrada_xmax;
+    GtkWidget * entrada_ymin;
+    GtkWidget * entrada_ymax;
+} Datos_Callback;
+
+static void importar (GtkWidget *widget, gpointer user_data) {
+    
+    Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer 
+    GtkWidget *dataimport_picker = Datos -> dataimport_picker;
+    
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER(dataimport_picker);
+    GFile *archivo = gtk_file_chooser_get_file(chooser);   // Extraer identificador GFile del archivo seleccionado 
+    if (archivo != NULL) {                                   // Verificar que *archivo no es null
+	gchar *path = g_file_get_path(archivo);            // Extraer path del archivo
+
+	if (path != NULL) {
+	    g_print("Archivo seleccionado: %s\n", path);
+
+	    if (Datos -> path != NULL) {   //Liberar espacio si estuviera ocupado
+                g_free(Datos -> path);
+            }
+
+	    Datos -> path = g_strdup(path);   //Copia del string con path a struct
+	    
+	    g_free(path);                                  // Liberar el string (según documentación)
+	}
+	g_object_unref(archivo);                           // Liberar el archivo (según documentación)
+    }
+    else {
+	g_print("No se seleccionó ningún archivo\n");
+    }
+}
+
+static void visualizar (GtkWidget *widget, gpointer user_data) {
+    Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer
+    GtkWidget * plot_container = Datos -> plot_container;
+    char * file_path = Datos -> path;
+    GtkWidget * entrada_titulo = Datos -> entrada_titulo;
+    GtkWidget * entrada_xlabel = Datos -> entrada_xlabel;
+    GtkWidget * entrada_ylabel = Datos -> entrada_ylabel;
+    GtkWidget * boton_color = Datos -> boton_color;
+    GtkWidget * grosor = Datos -> grosor;
+    GtkWidget * entrada_xmin = Datos -> entrada_xmin;
+    GtkWidget * entrada_xmax = Datos -> entrada_xmax;
+    GtkWidget * entrada_ymin = Datos -> entrada_ymin;
+    GtkWidget * entrada_ymax = Datos -> entrada_ymax;
+    
+
+    if (file_path != NULL) {
+	g_print("Visualizando archivo: %s\n", file_path);
+
+	remove("plot_temporal.png");    // Eliminar grafico en caso de existir
+
+	FILE * fp = popen("gnuplot -persist", "w");  // w: write
+	if (fp == NULL) {
+	    g_print("Error: no fue posible ejecutar gnuplot\n");
+	    return;
+	}
+
+	// Extraer valores de widgets de configuracion de grafica
+	const gchar * titulo = gtk_entry_get_text(GTK_ENTRY(entrada_titulo));
+	const gchar * xlabel = gtk_entry_get_text(GTK_ENTRY(entrada_xlabel));
+	const gchar * ylabel = gtk_entry_get_text(GTK_ENTRY(entrada_ylabel));
+	const gchar * xmin = gtk_entry_get_text(GTK_ENTRY(entrada_xmin));
+	const gchar * xmax = gtk_entry_get_text(GTK_ENTRY(entrada_xmax));
+	const gchar * ymin = gtk_entry_get_text(GTK_ENTRY(entrada_ymin));
+	const gchar * ymax = gtk_entry_get_text(GTK_ENTRY(entrada_ymax));
+	gdouble valor_grosor = gtk_spin_button_get_value(GTK_SPIN_BUTTON(grosor));
+	GdkRGBA color;
+	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(boton_color), &color);
+	gchar *color_hexadecimal = g_strdup_printf(
+	    "#%02x%02x%02x",
+	    (int)(color.red * 255),
+	    (int)(color.green * 255),
+	    (int)(color.blue * 255)); //Convertir a hexadecimal
+
+	
+	// Configuraciones inciciales de gnuplot
+	fprintf(fp, "set terminal png size 1500,600\n");   // Tamaño del grafico
+	fprintf(fp, "set output 'plot_temporal.png'\n");   // PNG de salida
+	fprintf(fp, "set datafile separator ' \t,;'\n");
+
+	//Configuraciones del grafico
+	fprintf(fp, "set title '%s'\n", titulo);
+	fprintf(fp, "set xlabel '%s'\n", xlabel);
+	fprintf(fp, "set ylabel '%s'\n", ylabel);
+	if (strlen(xmin) > 0 && strlen(xmax) > 0) {
+	    fprintf(fp, "set xrange [%s:%s]\n", xmin, xmax);
+	}
+	if (strlen(ymin) > 0 && strlen(ymax) > 0) {
+	    fprintf(fp, "set yrange [%s:%s]\n", ymin, ymax);
+	}
+
+        // Graficar
+	fprintf(fp,
+		"plot '%s' using 1:2 with lines linecolor '%s' linewidth %d title 'Señal'\n",
+		file_path,
+		color_hexadecimal,
+		(int)valor_grosor);
+        fprintf(fp, "exit\n");
+	
+	pclose(fp);
+	g_free(color_hexadecimal);
+    }
+    else {
+	g_print("Error: Importe primero un archivo\n");
+    }
+
+    // Limpiar contenedor
+    GList * children_list = gtk_container_get_children(GTK_CONTAINER(plot_container)); // Lista de hijos en plot_container
+    for (GList * i = children_list; i != NULL; i = i -> next) {
+	gtk_container_remove(GTK_CONTAINER(plot_container), GTK_WIDGET(i -> data));
+    }
+    g_list_free(children_list);   //Liberar memoria de lista de hijos en plot_container
+
+    // Colocar imagen en contenedor plot_container
+    GtkWidget * imagen = gtk_image_new_from_file("plot_temporal.png");
+
+    // Contener imagen en plot_container
+    gtk_container_add(GTK_CONTAINER(plot_container), imagen);
+    gtk_widget_show_all(plot_container);
+
+    remove("plot_temporal.png");   // Eliminar grafica temporal generada
+    
+}
 
 static void activate (GtkApplication* app, gpointer user_data) {
 
-    // ***************  DECLARAR WIDGETS ***************
+    // ***************  DECLARAR Variables ***************
     
     GtkWidget *window;              // Ventana principal
     GtkWidget *window_grid;         // Grid (cuadricula base para contener otros widgets)
-    GtkWidget *plot_area;           // Area para colocar la grafica
+    GtkWidget *plot_container;      // Contenedor box para grafica
     GtkWidget *plot_frame;          // Marco para el area de la grafica
     GtkWidget *dataimport_grid;     // Grid para area de importacion de datos
     GtkWidget *dataimport_frame;    // Marco para area de importacion de datos
     GtkWidget *dataimport_label;    // Etiqueta para importacion de datos
     GtkWidget *dataimport_picker;   // Seleccionador para importacion de datos
     GtkWidget *dataimport_button;   // Botón para importar datos
+    GtkWidget *plotconfig_grid;     // Grid para configuracion de gráfica
+    GtkWidget *plotconfig_frame;    // Frame para configuracion de gráfica
     GtkWidget *boton_visualizar;    // Boton para visualizacion de datos
 
+    //Struct para pasar datos entre funciones
+    static Datos_Callback Datos;    // Struct para pasar información a funciones de callbacks
+    //Inicializar punteros a NULL
+    Datos.path = NULL;
+    Datos.dataimport_picker = NULL;
+    Datos.plot_container = NULL;
+    Datos.entrada_titulo = NULL;
+    Datos.entrada_xlabel = NULL;
+    Datos.entrada_ylabel = NULL;
+    Datos.boton_color = NULL;
+    Datos.grosor = NULL;
+    Datos.entrada_xmin = NULL;
+    Datos.entrada_xmax = NULL;
+    Datos.entrada_ymin = NULL;
+    Datos.entrada_ymax = NULL;
     
     // ***************  VENTANA PRINCIPAL ***************
     
@@ -40,21 +198,22 @@ static void activate (GtkApplication* app, gpointer user_data) {
     }
 
     // Propiedades del grid
-    gtk_grid_set_row_spacing (GTK_GRID (window_grid), 25);                 // Espaciamiento de filas
+    gtk_grid_set_row_spacing (GTK_GRID (window_grid), 10);                 // Espaciamiento de filas
     gtk_grid_set_column_spacing (GTK_GRID (window_grid), 25);              // Espaciamiento de columnas
     gtk_grid_set_row_homogeneous(GTK_GRID(window_grid), FALSE);            // Filas homogeneas: Falso
-    gtk_grid_set_column_homogeneous(GTK_GRID(window_grid), TRUE);          // Columnas homogeneas: Verdadero
+    gtk_grid_set_column_homogeneous(GTK_GRID(window_grid), FALSE);          // Columnas homogeneas: Verdadero
 
     // Contener
     gtk_container_add (GTK_CONTAINER (window), window_grid);               // Contener el grid en window
 
     // (AUXILIAR, etiqueta al grid para visualizarlo)
-    for (int i = 0; i < 2; i++) {
-	for (int j = 0; j < 4; j++) {
-	    GtkWidget *label = gtk_label_new("");
-	    gtk_grid_attach(GTK_GRID(window_grid), label, j, i, 1, 1);
-	}
-    }
+//    for (int i = 0; i < 2; i++) {
+//	for (int j = 0; j < 4; j++) {
+//	    GtkWidget *label = gtk_label_new("O");
+//	    gtk_widget_set_hexpand(label, FALSE);
+//	    gtk_grid_attach(GTK_GRID(window_grid), label, j, i, 1, 1);
+//	}
+//    }
     
     // ********** CONTENEDOR PARA IMPORTACION DE DATOS *************
     
@@ -76,12 +235,13 @@ static void activate (GtkApplication* app, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(window_grid), dataimport_frame, 0, 0, 1, 1);   //Contener frame en el grid principal
 
     // (AUXILIAR, etiqueta al grid para visualizarlo)
-    for (int i = 0; i < 1; i++) {
-	for (int j = 0; j < 3; j++) {
-	    GtkWidget *label = gtk_label_new("");
-	    gtk_grid_attach(GTK_GRID(dataimport_grid), label, j, i, 1, 1);
-	}
-    }
+//    for (int i = 0; i < 1; i++) {
+//	for (int j = 0; j < 3; j++) {
+//	    GtkWidget *label = gtk_label_new("##");
+//	    gtk_widget_set_hexpand(label, FALSE);
+//	    gtk_grid_attach(GTK_GRID(dataimport_grid), label, j, i, 1, 1);
+//	}
+//    }
 
     
     // *************** SELECCIONADOR DE ARCHIVOS ***************
@@ -93,9 +253,10 @@ static void activate (GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand (dataimport_label, FALSE);                       // Expandir: Falso
 
     // Crear seleccionador
-    dataimport_picker = gtk_file_chooser_button_new ("Escoja un archivo", GTK_FILE_CHOOSER_ACTION_OPEN);
+    dataimport_picker = gtk_file_chooser_button_new ("Seleccione un archivo", GTK_FILE_CHOOSER_ACTION_OPEN);
     gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dataimport_picker), FALSE);
-    gtk_widget_set_hexpand (dataimport_picker, TRUE);                       // Expandir: Verdadero
+    gtk_widget_set_size_request(dataimport_picker, 250, -1);
+    gtk_widget_set_hexpand (dataimport_picker, FALSE);                  
 
     // Contener
     gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_label, 0, 0, 1, 1); // Contener label en grid imp
@@ -103,35 +264,192 @@ static void activate (GtkApplication* app, gpointer user_data) {
 
     
     // ***************   BOTON IMPORTAR   ***************
+
     
     // Crear boton
     dataimport_button = gtk_button_new_with_label ("Importar");
-    //g_signal_connect (dataimport_button, "clicked", G_CALLBACK (fun_importar), NULL);
-    gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); 
+
+    // Datos a pasar al callback
+    Datos.dataimport_picker = dataimport_picker;      // Para pasar Widget 
+  
+    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), &Datos); // Conectar señal
+    gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); // Contener
 
     
-    // ***************     PLOT AREA      ***************
-    
-    //Crear plot area
-    plot_area = gtk_drawing_area_new ();
+    // ***************     CONTENEDOR PARA GRAFICAR      ***************
+
+    // Crear socket
+    plot_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);  //BUSCAR
 
     // Propiedades
-    gtk_widget_set_size_request(plot_area, 1500, 600);                        // Tamaño
+    gtk_widget_set_size_request(plot_container, 1500, 600);                        // Tamaño
 
     // Crear frame
     plot_frame = gtk_frame_new("Gráfica");
     
     // Contener
-    gtk_container_add(GTK_CONTAINER(plot_frame), plot_area);                  // Contener plot area en el frame
+    gtk_container_add(GTK_CONTAINER(plot_frame), plot_container);             // Contener plot_container en el frame
     gtk_grid_attach(GTK_GRID(window_grid), plot_frame, 0, 1, 4, 1);           // Contener el frame en el grid
-
     
     // *************** BOTON VISUALIZACION ***************
     
     // Crear boton
     boton_visualizar = gtk_button_new_with_label ("Visualizar");
-    //g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (fun_visualizar), NULL);
+
+    //Propiedades
+    gtk_widget_set_size_request(boton_visualizar, 150, 50);
+
+    // Datos a pasar el callback
+    Datos.plot_container = plot_container; //Pasar Widget de contenedor para gráfica
+    
+    g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (visualizar), &Datos);
     gtk_grid_attach(GTK_GRID(window_grid), boton_visualizar, 3, 0, 1, 1);
+
+    
+    // ********** CONTENEDOR PARA CONFIGURACION DE GRAFICA *************
+    
+    // Crear grid
+    plotconfig_grid = gtk_grid_new ();
+
+    // Propiedades del grid
+    gtk_grid_set_row_spacing (GTK_GRID (plotconfig_grid), 5);              // Espaciamiento de filas
+    gtk_grid_set_column_spacing (GTK_GRID (plotconfig_grid), 10);           // Espaciamiento de columnas
+    gtk_grid_set_column_homogeneous(GTK_GRID(plotconfig_grid), FALSE);      // Filas homogeneas: Falso
+    gtk_grid_set_column_homogeneous(GTK_GRID(plotconfig_grid), FALSE);      // Columnas homogeneas: Falso
+    gtk_container_set_border_width (GTK_CONTAINER (plotconfig_grid), 5);   // Borde
+
+    // Crear frame
+    plotconfig_frame = gtk_frame_new("Configuración de gráfica");
+
+    // Contener
+    gtk_container_add(GTK_CONTAINER(plotconfig_frame), plotconfig_grid);    // Contener grid en el frame
+    gtk_grid_attach(GTK_GRID(window_grid), plotconfig_frame, 1, 0, 2, 1);   //Contener frame en el grid principal
+    // Widgets
+
+    GtkWidget * label_entrada_titulo = gtk_label_new("Título:");                // Etiqueta titulo
+    gtk_widget_set_halign (label_entrada_titulo, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_entrada_titulo, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_entrada_titulo, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_entrada_titulo, 0, 0, 1, 1);
+
+    GtkWidget * entrada_titulo = gtk_entry_new();                               // Widget para título de grafica
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_titulo), "Título del gráfico");
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_titulo, 1, 0, 7, 1);
+    gtk_widget_set_hexpand (entrada_titulo, TRUE);
+    gtk_widget_set_size_request(entrada_titulo, 75, -1);
+
+    GtkWidget * label_entrada_xlabel = gtk_label_new("Eje X:");        // Etiqueta eje X
+    gtk_widget_set_halign (label_entrada_xlabel, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_entrada_xlabel, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_entrada_xlabel, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_entrada_xlabel, 0, 1, 1, 1);
+
+    GtkWidget * entrada_xlabel = gtk_entry_new();                               // Widget para etiqueta de eje X
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_xlabel), "Etiqueta eje X"); 
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_xlabel, 1, 1, 3, 1);
+    gtk_widget_set_hexpand(entrada_xlabel, FALSE);
+    gtk_widget_set_size_request(entrada_xlabel, 75, -1);
+
+    GtkWidget * label_entrada_ylabel = gtk_label_new("Eje Y:");        // Etiqueta eje Y
+    gtk_widget_set_halign (label_entrada_ylabel, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_entrada_ylabel, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_entrada_ylabel, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_entrada_ylabel, 4, 1, 1, 1);
+
+    GtkWidget * entrada_ylabel = gtk_entry_new();                               // Widget para etiqueta de eje Y
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_ylabel), "Etiqueta eje Y");
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_ylabel, 5, 1, 3, 1);
+    gtk_widget_set_hexpand(entrada_ylabel, FALSE);
+    gtk_widget_set_size_request(entrada_ylabel, 75, -1);
+
+    GtkWidget * label_boton_color = gtk_label_new("Color de línea:");           // Etiqueta color de linea
+    gtk_widget_set_halign (label_boton_color, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_boton_color, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_boton_color, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_boton_color, 8, 1, 1, 1);
+    
+    GtkWidget * boton_color = gtk_color_button_new();                           // Widget para esoger color
+    gtk_color_button_set_title(GTK_COLOR_BUTTON(boton_color), "Seleccionar color de línea"); // Titulo de boton
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), boton_color, 9, 1, 1, 1);
+
+    GtkWidget * label_grosor = gtk_label_new("Grosor de línea:");        // Etiqueta grosor de linea
+    gtk_widget_set_halign (label_grosor, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_grosor, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_grosor, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_grosor, 8, 2, 1, 1);
+
+    GtkWidget * grosor = gtk_spin_button_new_with_range(1, 10, 1); // Widget grosor de linea rango 1 a 10
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(grosor), 2);              // Grosor 2 por defecto
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), grosor, 9, 2, 1, 1);
+    
+    GtkWidget * label_xmin = gtk_label_new("Xmin:");                    // Etiqueta grosor de Xmin
+    gtk_widget_set_halign (label_xmin, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_xmin, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_xmin, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_xmin, 0, 2, 1, 1);
+
+    GtkWidget * entrada_xmin = gtk_entry_new();                     // Widget para entrada Xmin
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_xmin), "Xmin");
+    gtk_entry_set_width_chars(GTK_ENTRY(entrada_xmin), 5);
+    gtk_widget_set_hexpand(entrada_xmin, FALSE);
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_xmin, 1, 2, 1, 1);
+
+    GtkWidget * label_xmax = gtk_label_new("Xmax:");                    // Etiqueta grosor de Xmax
+    gtk_widget_set_halign (label_xmax, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_xmax, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_xmax, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_xmax, 2, 2, 1, 1);
+
+    GtkWidget * entrada_xmax = gtk_entry_new();                     // Widget para entrada Xmax
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_xmax), "Xmax");
+    gtk_entry_set_width_chars(GTK_ENTRY(entrada_xmax), 5);
+    gtk_widget_set_hexpand(entrada_xmax, FALSE);
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_xmax, 3, 2, 1, 1);
+
+    GtkWidget * label_ymin = gtk_label_new("Ymin:");                    // Etiqueta grosor de Ymin
+    gtk_widget_set_halign (label_ymin, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_ymin, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_ymin, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_ymin, 4, 2, 1, 1);
+
+    GtkWidget * entrada_ymin = gtk_entry_new();                     // Widget para entrada Ymin
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_ymin), "Ymin");
+    gtk_entry_set_width_chars(GTK_ENTRY(entrada_ymin), 5);
+    gtk_widget_set_hexpand(entrada_ymin, FALSE);
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_ymin, 5, 2, 1, 1);
+
+    GtkWidget * label_ymax = gtk_label_new("Ymax:");                    // Etiqueta grosor de Ymax
+    gtk_widget_set_halign (label_ymax, GTK_ALIGN_START);              // Alineacion horizontal
+    gtk_widget_set_valign (label_ymax, GTK_ALIGN_CENTER);             // Alineacion vertical
+    gtk_widget_set_hexpand (label_ymax, FALSE);                       // Expandir: Falso
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), label_ymax, 6, 2, 1, 1);
+
+    GtkWidget * entrada_ymax = gtk_entry_new();                     // Widget para entrada Ymax
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entrada_ymax), "Ymax");
+    gtk_entry_set_width_chars(GTK_ENTRY(entrada_ymax), 5);
+    gtk_widget_set_hexpand(entrada_ymax, FALSE);
+    gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_ymax, 7, 2, 1, 1);
+
+    //Guardar valores de los widgets en el struct para pasar a función de Callback de visualizar
+    Datos.entrada_titulo = entrada_titulo;
+    Datos.entrada_xlabel = entrada_xlabel;
+    Datos.entrada_ylabel = entrada_ylabel;
+    Datos.boton_color = boton_color;
+    Datos.grosor = grosor;
+    Datos.entrada_xmin = entrada_xmin;
+    Datos.entrada_xmax = entrada_xmax;
+    Datos.entrada_ymin = entrada_ymin;
+    Datos.entrada_ymax = entrada_ymax;
+    
+
+    // (AUXILIAR, etiqueta al grid para visualizarlo)
+//    for (int i = 0; i < 3; i++) {
+//	for (int j = 0; j < 10; j++) {
+//	    GtkWidget *label = gtk_label_new("#");
+//	    gtk_widget_set_hexpand(label, FALSE);
+//	    gtk_grid_attach(GTK_GRID(plotconfig_grid), label, j, i, 1, 1);
+//	}
+//    }
 
     
     // ***************  MOSTRAR RESULTADO  ***************

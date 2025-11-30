@@ -7,6 +7,17 @@ typedef struct {
     char * path;                             // Para pasar path de archivo actual
     GtkWidget * dataimport_picker;           // Para pasar widget de picker
     GtkWidget * plot_container;              // Para pasar widget de contenedor de grafica
+
+// Para pasar configuraciones de grafica
+    GtkWidget * entrada_titulo;
+    GtkWidget * entrada_xlabel;
+    GtkWidget * entrada_ylabel;
+    GtkWidget * boton_color;
+    GtkWidget * grosor;
+    GtkWidget * entrada_xmin;
+    GtkWidget * entrada_xmax;
+    GtkWidget * entrada_ymin;
+    GtkWidget * entrada_ymax;
 } Datos_Callback;
 
 static void importar (GtkWidget *widget, gpointer user_data) {
@@ -41,6 +52,15 @@ static void visualizar (GtkWidget *widget, gpointer user_data) {
     Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer
     GtkWidget * plot_container = Datos -> plot_container;
     char * file_path = Datos -> path;
+    GtkWidget * entrada_titulo = Datos -> entrada_titulo;
+    GtkWidget * entrada_xlabel = Datos -> entrada_xlabel;
+    GtkWidget * entrada_ylabel = Datos -> entrada_ylabel;
+    GtkWidget * boton_color = Datos -> boton_color;
+    GtkWidget * grosor = Datos -> grosor;
+    GtkWidget * entrada_xmin = Datos -> entrada_xmin;
+    GtkWidget * entrada_xmax = Datos -> entrada_xmax;
+    GtkWidget * entrada_ymin = Datos -> entrada_ymin;
+    GtkWidget * entrada_ymax = Datos -> entrada_ymax;
     
 
     if (file_path != NULL) {
@@ -53,17 +73,51 @@ static void visualizar (GtkWidget *widget, gpointer user_data) {
 	    g_print("Error: no fue posible ejecutar gnuplot\n");
 	    return;
 	}
+
+	// Extraer valores de widgets de configuracion de grafica
+	const gchar * titulo = gtk_entry_get_text(GTK_ENTRY(entrada_titulo));
+	const gchar * xlabel = gtk_entry_get_text(GTK_ENTRY(entrada_xlabel));
+	const gchar * ylabel = gtk_entry_get_text(GTK_ENTRY(entrada_ylabel));
+	const gchar * xmin = gtk_entry_get_text(GTK_ENTRY(entrada_xmin));
+	const gchar * xmax = gtk_entry_get_text(GTK_ENTRY(entrada_xmax));
+	const gchar * ymin = gtk_entry_get_text(GTK_ENTRY(entrada_ymin));
+	const gchar * ymax = gtk_entry_get_text(GTK_ENTRY(entrada_ymax));
+	gdouble valor_grosor = gtk_spin_button_get_value(GTK_SPIN_BUTTON(grosor));
+	GdkRGBA color;
+	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(boton_color), &color);
+	gchar *color_hexadecimal = g_strdup_printf(
+	    "#%02x%02x%02x",
+	    (int)(color.red * 255),
+	    (int)(color.green * 255),
+	    (int)(color.blue * 255)); //Convertir a hexadecimal
+
+	
+	// Configuraciones inciciales de gnuplot
 	fprintf(fp, "set terminal png size 1500,600\n");   // Tamaño del grafico
 	fprintf(fp, "set output 'plot_temporal.png'\n");   // PNG de salida
-	
-	fprintf(fp, "set title 'Serie temporal'\n");
-	fprintf(fp, "set xlabel 'Tiempo'\n");
-	fprintf(fp, "set ylabel 'Magnitud'\n");
 	fprintf(fp, "set datafile separator ' \t,;'\n");
-	fprintf(fp, "plot '%s' using 1:2 with lines title 'Señal'\n", file_path);
-	fprintf(fp, "exit\n");
+
+	//Configuraciones del grafico
+	fprintf(fp, "set title '%s'\n", titulo);
+	fprintf(fp, "set xlabel '%s'\n", xlabel);
+	fprintf(fp, "set ylabel '%s'\n", ylabel);
+	if (strlen(xmin) > 0 && strlen(xmax) > 0) {
+	    fprintf(fp, "set xrange [%s:%s]\n", xmin, xmax);
+	}
+	if (strlen(ymin) > 0 && strlen(ymax) > 0) {
+	    fprintf(fp, "set yrange [%s:%s]\n", ymin, ymax);
+	}
+
+        // Graficar
+	fprintf(fp,
+		"plot '%s' using 1:2 with lines linecolor '%s' linewidth %d title 'Señal'\n",
+		file_path,
+		color_hexadecimal,
+		(int)valor_grosor);
+        fprintf(fp, "exit\n");
 	
 	pclose(fp);
+	g_free(color_hexadecimal);
     }
     else {
 	g_print("Error: Importe primero un archivo\n");
@@ -104,7 +158,21 @@ static void activate (GtkApplication* app, gpointer user_data) {
     GtkWidget *plotconfig_frame;    // Frame para configuracion de gráfica
     GtkWidget *boton_visualizar;    // Boton para visualizacion de datos
 
+    //Struct para pasar datos entre funciones
     static Datos_Callback Datos;    // Struct para pasar información a funciones de callbacks
+    //Inicializar punteros a NULL
+    Datos.path = NULL;
+    Datos.dataimport_picker = NULL;
+    Datos.plot_container = NULL;
+    Datos.entrada_titulo = NULL;
+    Datos.entrada_xlabel = NULL;
+    Datos.entrada_ylabel = NULL;
+    Datos.boton_color = NULL;
+    Datos.grosor = NULL;
+    Datos.entrada_xmin = NULL;
+    Datos.entrada_xmax = NULL;
+    Datos.entrada_ymin = NULL;
+    Datos.entrada_ymax = NULL;
     
     // ***************  VENTANA PRINCIPAL ***************
     
@@ -202,7 +270,6 @@ static void activate (GtkApplication* app, gpointer user_data) {
     dataimport_button = gtk_button_new_with_label ("Importar");
 
     // Datos a pasar al callback
-    Datos.path = NULL;                   // Para obtener path
     Datos.dataimport_picker = dataimport_picker;      // Para pasar Widget 
   
     g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), &Datos); // Conectar señal
@@ -311,7 +378,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand (label_grosor, FALSE);                       // Expandir: Falso
     gtk_grid_attach(GTK_GRID(plotconfig_grid), label_grosor, 8, 2, 1, 1);
 
-    GtkWidget * grosor = gtk_spin_button_new_with_range(1, 10, 0.5); // Widget grosor de linea rango 1 a 10
+    GtkWidget * grosor = gtk_spin_button_new_with_range(1, 10, 1); // Widget grosor de linea rango 1 a 10
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(grosor), 2);              // Grosor 2 por defecto
     gtk_grid_attach(GTK_GRID(plotconfig_grid), grosor, 9, 2, 1, 1);
     
@@ -362,6 +429,17 @@ static void activate (GtkApplication* app, gpointer user_data) {
     gtk_entry_set_width_chars(GTK_ENTRY(entrada_ymax), 5);
     gtk_widget_set_hexpand(entrada_ymax, FALSE);
     gtk_grid_attach(GTK_GRID(plotconfig_grid), entrada_ymax, 7, 2, 1, 1);
+
+    //Guardar valores de los widgets en el struct para pasar a función de Callback de visualizar
+    Datos.entrada_titulo = entrada_titulo;
+    Datos.entrada_xlabel = entrada_xlabel;
+    Datos.entrada_ylabel = entrada_ylabel;
+    Datos.boton_color = boton_color;
+    Datos.grosor = grosor;
+    Datos.entrada_xmin = entrada_xmin;
+    Datos.entrada_xmax = entrada_xmax;
+    Datos.entrada_ymin = entrada_ymin;
+    Datos.entrada_ymax = entrada_ymax;
     
 
     // (AUXILIAR, etiqueta al grid para visualizarlo)

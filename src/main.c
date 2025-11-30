@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <gtk/gtk.h>
 #include <gtk/gtkx.h>
 
@@ -5,7 +6,7 @@ typedef struct {
     int Entero;                              // Para pasar enteros
     char * path;                             // Para pasar path de archivo actual
     GtkWidget * dataimport_picker;           // Para pasar widget de picker
-    GtkWidget * socket;                      // Para pasar widget de socket (contenedor de grafica)
+    GtkWidget * plot_container;              // Para pasar widget de contenedor de grafica
 } Datos_Callback;
 
 static void importar (GtkWidget *widget, gpointer user_data) {
@@ -38,31 +39,29 @@ static void importar (GtkWidget *widget, gpointer user_data) {
 
 static void visualizar (GtkWidget *widget, gpointer user_data) {
     Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer
-    GtkWidget *socket = Datos -> socket;
+    GtkWidget * plot_container = Datos -> plot_container;
     char * file_path = Datos -> path;
     
-    //GdkWindow *ventana_gdk = gtk_widget_get_window(socket);
-    guint32 ID = gtk_socket_get_id(GTK_SOCKET(socket));
-    g_print("Socket XID: %#x\n", ID);
 
     if (file_path != NULL) {
 	g_print("Visualizando archivo: %s\n", file_path);
+
+	remove("plot_temporal.png");    // Eliminar grafico en caso de existir
 
 	FILE * fp = popen("gnuplot -persist", "w");  // w: write
 	if (fp == NULL) {
 	    g_print("Error: no fue posible ejecutar gnuplot\n");
 	    return;
 	}
-	fprintf(fp, "set terminal x11\n");
-	//fprintf(fp, "set output\n");
-	fprintf(fp, "set term x11 window '%u'\n", ID);
+	fprintf(fp, "set terminal png size 1500,600\n");   // Tamaño del grafico
+	fprintf(fp, "set output 'plot_temporal.png'\n");   // PNG de salida
 	
 	fprintf(fp, "set title 'Serie temporal'\n");
 	fprintf(fp, "set xlabel 'Tiempo'\n");
 	fprintf(fp, "set ylabel 'Magnitud'\n");
-	fprintf(fp, "set datafile separator ';'\n");
+	fprintf(fp, "set datafile separator ' \t,;'\n");
 	fprintf(fp, "plot '%s' using 1:2 with lines title 'Señal'\n", file_path);
-	fprintf(fp, "pause mouse\n");
+	fprintf(fp, "exit\n");
 	
 	pclose(fp);
     }
@@ -70,6 +69,21 @@ static void visualizar (GtkWidget *widget, gpointer user_data) {
 	g_print("Error: Importe primero un archivo\n");
     }
 
+    // Limpiar contenedor
+    GList * children_list = gtk_container_get_children(GTK_CONTAINER(plot_container)); // Lista de hijos en plot_container
+    for (GList * i = children_list; i != NULL; i = i -> next) {
+	gtk_container_remove(GTK_CONTAINER(plot_container), GTK_WIDGET(i -> data));
+    }
+    g_list_free(children_list);   //Liberar memoria de lista de hijos en plot_container
+
+    // Colocar imagen en contenedor plot_container
+    GtkWidget * imagen = gtk_image_new_from_file("plot_temporal.png");
+
+    // Contener imagen en plot_container
+    gtk_container_add(GTK_CONTAINER(plot_container), imagen);
+    gtk_widget_show_all(plot_container);
+
+    remove("plot_temporal.png");   // Eliminar grafica temporal generada
     
 }
 
@@ -79,8 +93,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     
     GtkWidget *window;              // Ventana principal
     GtkWidget *window_grid;         // Grid (cuadricula base para contener otros widgets)
-    //GtkWidget *plot_area;           // Area para colocar la grafica
-    GtkWidget *socket;              // Socket para grafica
+    GtkWidget *plot_container;      // Contenedor box para grafica
     GtkWidget *plot_frame;          // Marco para el area de la grafica
     GtkWidget *dataimport_grid;     // Grid para area de importacion de datos
     GtkWidget *dataimport_frame;    // Marco para area de importacion de datos
@@ -115,7 +128,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     }
 
     // Propiedades del grid
-    gtk_grid_set_row_spacing (GTK_GRID (window_grid), 25);                 // Espaciamiento de filas
+    gtk_grid_set_row_spacing (GTK_GRID (window_grid), 10);                 // Espaciamiento de filas
     gtk_grid_set_column_spacing (GTK_GRID (window_grid), 25);              // Espaciamiento de columnas
     gtk_grid_set_row_homogeneous(GTK_GRID(window_grid), FALSE);            // Filas homogeneas: Falso
     gtk_grid_set_column_homogeneous(GTK_GRID(window_grid), TRUE);          // Columnas homogeneas: Verdadero
@@ -126,7 +139,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     // (AUXILIAR, etiqueta al grid para visualizarlo)
     for (int i = 0; i < 2; i++) {
 	for (int j = 0; j < 4; j++) {
-	    GtkWidget *label = gtk_label_new("");
+	    GtkWidget *label = gtk_label_new("O");
 	    gtk_grid_attach(GTK_GRID(window_grid), label, j, i, 1, 1);
 	}
     }
@@ -153,7 +166,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     // (AUXILIAR, etiqueta al grid para visualizarlo)
     for (int i = 0; i < 1; i++) {
 	for (int j = 0; j < 3; j++) {
-	    GtkWidget *label = gtk_label_new("");
+	    GtkWidget *label = gtk_label_new("##");
 	    gtk_grid_attach(GTK_GRID(dataimport_grid), label, j, i, 1, 1);
 	}
     }
@@ -194,21 +207,17 @@ static void activate (GtkApplication* app, gpointer user_data) {
     // ***************     CONTENEDOR PARA GRAFICAR      ***************
 
     // Crear socket
-    socket = gtk_socket_new();
+    plot_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);  //BUSCAR
 
     // Propiedades
-    gtk_widget_set_size_request(socket, 1500, 600);                        // Tamaño
-
-    // Mostrar socket
-    gtk_widget_show(socket);
+    gtk_widget_set_size_request(plot_container, 1500, 600);                        // Tamaño
 
     // Crear frame
     plot_frame = gtk_frame_new("Gráfica");
     
     // Contener
-    gtk_container_add(GTK_CONTAINER(plot_frame), socket);                     // Contener socket en el frame
+    gtk_container_add(GTK_CONTAINER(plot_frame), plot_container);             // Contener plot_container en el frame
     gtk_grid_attach(GTK_GRID(window_grid), plot_frame, 0, 1, 4, 1);           // Contener el frame en el grid
-
     
     // *************** BOTON VISUALIZACION ***************
     
@@ -216,7 +225,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     boton_visualizar = gtk_button_new_with_label ("Visualizar");
 
     // Datos a pasar el callback
-    Datos.socket = socket;                         // Pasar Widget
+    Datos.plot_container = plot_container; //Pasar Widget de contenedor para gráfica
     
     g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (visualizar), &Datos);
     gtk_grid_attach(GTK_GRID(window_grid), boton_visualizar, 3, 0, 1, 1);

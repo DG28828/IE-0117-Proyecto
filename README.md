@@ -15,14 +15,15 @@ El programa permite importar datos de un archivo de texto, visulizar los datos y
 
 **Dependencias:**
 - GTK+ 3.0 (Probado en librería versión 3.24)
-- Makefile
+- Makefile (Probado en GNU Make 4.3)
 
-**¿Como compilar?
+**¿Como compilar?**
 El archivo **Makefile** contiene las instrucciones de compilación, ejecución y verificación de errores. Las instrucciones brindadas son:
 
-- **$make**: compila en un archivo resultante **main**.
-- **$make run**: compila y ejecuta el archivo **main**.
-- **$make clean**: borra los archivos .o resultantes de la compilación y el archivo compilado **main**.
+- **$make**: compila en un ejecutable resultante **visualizador**.
+- **$make run**: compila y ejecuta el archivo **visualizador**.
+- **$make clean**: borra los archivos .o resultantes de la compilación y el archivo compilado **visualizador**.
 - **$make valgrind**: realiza un análisis en búsqueda de mal manejo de memoria.
+- **$make deps**: instala las dependencias del programa.
 
-En caso de correr únicamente **$make**, es posible ejecutar el archivo resultante con **$./main**.
+En caso de correr únicamente **$make**, es posible ejecutar el archivo resultante con **$./visualizador**.

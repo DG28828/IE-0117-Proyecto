@@ -1,6 +1,8 @@
 # Visualizador de datos
 Este programa es un visualizador de datos escrito en lenguaje de programación C, empleando la librería GTK3.
 
+![Captura de pantalla del visualizador de datos](/fig/screenshot.png)
+
 El programa permite importar datos de un archivo de texto, visulizar los datos y modificar el título, etiquetas de ejes de la gráfica, límites de ejes X e Y, así como el color y espesor de línea.
 
 **Limitaciones:**

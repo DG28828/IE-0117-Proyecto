@@ -1,15 +1,16 @@
 #include <gtk/gtk.h>
 
 typedef struct {
-    int Entero;                 // Para pasar enteros
-    char * Cadena;               // Para pasar cadenas entre callbacks (por ejemplo un path)
-    GtkWidget * Widget;           // Para pasar widgets entre callbacks
+    int Entero;                              // Para pasar enteros
+    char * path;                             // Para pasar path de archivo actual
+    GtkWidget * dataimport_picker;           // Para pasar widget de picker
+    GtkWidget * plot_area;                   // Para pasar widget de plot area
 } Datos_Callback;
 
 static void importar (GtkWidget *widget, gpointer user_data) {
     
-    Datos_Callback * Datos_Callback_Importacion = (Datos_Callback*) user_data; //Cast del gpointer 
-    GtkWidget *dataimport_picker = Datos_Callback_Importacion->Widget;
+    Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer 
+    GtkWidget *dataimport_picker = Datos -> dataimport_picker;
     
     GtkFileChooser *chooser = GTK_FILE_CHOOSER(dataimport_picker);
     GFile *archivo = gtk_file_chooser_get_file(chooser);   // Extraer identificador GFile del archivo seleccionado 
@@ -19,11 +20,11 @@ static void importar (GtkWidget *widget, gpointer user_data) {
 	if (path != NULL) {
 	    g_print("Archivo seleccionado: %s\n", path);
 
-	    if (Datos_Callback_Importacion->Cadena != NULL) {   //Liberar espacio si estuviera ocupado
-                g_free(Datos_Callback_Importacion->Cadena);
+	    if (Datos -> path != NULL) {   //Liberar espacio si estuviera ocupado
+                g_free(Datos -> path);
             }
 
-	    Datos_Callback_Importacion -> Cadena = g_strdup(path);   //Copia del string con path a struct
+	    Datos -> path = g_strdup(path);   //Copia del string con path a struct
 	    
 	    g_free(path);                                  // Liberar el string (según documentación)
 	}
@@ -34,12 +35,23 @@ static void importar (GtkWidget *widget, gpointer user_data) {
     }
 }
 
-//static void visualizar (GtkWidget *widget, gpointer data) {
-//}
+static void visualizar (GtkWidget *widget, gpointer user_data) {
+    Datos_Callback * Datos = (Datos_Callback*) user_data; //Cast del gpointer
+    GtkWidget *plot_area = Datos -> plot_area;
+    char * file_path = Datos -> path;
+
+    if (file_path != NULL) {
+	g_print("Visualizando archivo: %s\n", file_path);
+
+	//FILE * fp = popen();
+    }
+
+    
+}
 
 static void activate (GtkApplication* app, gpointer user_data) {
 
-    // ***************  DECLARAR WIDGETS ***************
+    // ***************  DECLARAR Variables ***************
     
     GtkWidget *window;              // Ventana principal
     GtkWidget *window_grid;         // Grid (cuadricula base para contener otros widgets)
@@ -52,6 +64,7 @@ static void activate (GtkApplication* app, gpointer user_data) {
     GtkWidget *dataimport_button;   // Botón para importar datos
     GtkWidget *boton_visualizar;    // Boton para visualizacion de datos
 
+    static Datos_Callback Datos;    // Struct para pasar información a funciones de callbacks
     
     // ***************  VENTANA PRINCIPAL ***************
     
@@ -146,11 +159,10 @@ static void activate (GtkApplication* app, gpointer user_data) {
     dataimport_button = gtk_button_new_with_label ("Importar");
 
     // Datos a pasar al callback
-    static Datos_Callback Datos_Callback_Importacion;
-    Datos_Callback_Importacion.Cadena = NULL;                   // Para obtener path
-    Datos_Callback_Importacion.Widget = dataimport_picker;      // Para pasar Widget 
+    Datos.path = NULL;                   // Para obtener path
+    Datos.dataimport_picker = dataimport_picker;      // Para pasar Widget 
   
-    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), &Datos_Callback_Importacion); // Conectar señal
+    g_signal_connect (dataimport_button, "clicked", G_CALLBACK (importar), &Datos); // Conectar señal
     gtk_grid_attach(GTK_GRID(dataimport_grid), dataimport_button, 2, 0, 1, 1); // Contener
 
     
@@ -174,7 +186,11 @@ static void activate (GtkApplication* app, gpointer user_data) {
     
     // Crear boton
     boton_visualizar = gtk_button_new_with_label ("Visualizar");
-    //g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (visualizar), NULL);
+
+    // Datos a pasar el callback
+    Datos.plot_area = plot_area;                         // Pasar Widget
+    
+    g_signal_connect (boton_visualizar, "clicked", G_CALLBACK (visualizar), &Datos);
     gtk_grid_attach(GTK_GRID(window_grid), boton_visualizar, 3, 0, 1, 1);
 
     
